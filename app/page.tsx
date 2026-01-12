@@ -1231,32 +1231,34 @@ export default function TalentDemandPage() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b shadow-sm">
+      {/* Header - V2 Purple Gradient */}
+      <header className="bg-gradient-to-r from-[#4A148C] to-[#6A1B9A] border-b border-[#4A148C]/20">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
                 href="/"
-                className="text-purple-600 hover:text-purple-700 flex items-center gap-2 text-sm font-medium"
+                className="text-white/80 hover:text-white flex items-center gap-2 text-sm font-medium transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
                 Back to Hub
               </Link>
-              <div className="h-6 w-px bg-gray-300"></div>
+              <div className="h-6 w-px bg-white/20"></div>
               <img
-                src="/images/sbt-logo-full.png"
+                src="/images/sbtlogotransparentwhite.png"
                 alt="Skill Bridge Talent"
                 className="h-8 w-auto"
               />
-              <div className="h-6 w-px bg-gray-300"></div>
+              <div className="h-6 w-px bg-white/20"></div>
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">
+                <p className="text-xs uppercase tracking-wider text-white/80 font-semibold">
+                  Skill Bridge Talent
+                </p>
+                <h1 className="text-lg font-bold text-white -mt-0.5">
                   Talent Demand Analyst
                 </h1>
-                <p className="text-sm text-gray-500">AI-powered talent demand trends and workforce planning insights</p>
               </div>
             </div>
 
@@ -1264,18 +1266,18 @@ export default function TalentDemandPage() {
             <div className="flex items-center gap-4">
               {/* Files ready indicator */}
               {artifacts.length > 0 && (
-                <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full">
+                <div className="flex items-center gap-2 text-xs text-white bg-white/20 px-3 py-1.5 rounded-full">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   <span>{artifacts.length} file{artifacts.length > 1 ? 's' : ''} ready</span>
                 </div>
               )}
-              
+
               {/* Multi-turn active */}
               {conversationStarted && !isProcessing && (
-                <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">
-                  <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-center gap-2 text-xs text-white bg-white/20 px-3 py-1.5 rounded-full">
+                  <svg className="w-4 h-4 text-green-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                   <span>Multi-turn active</span>
@@ -1284,7 +1286,7 @@ export default function TalentDemandPage() {
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-6 relative">
