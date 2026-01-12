@@ -1237,7 +1237,7 @@ export default function TalentDemandPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
-                href="/"
+                href="https://hub.skillbridgetalent.ai"
                 className="text-white/80 hover:text-white flex items-center gap-2 text-sm font-medium transition-colors"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
