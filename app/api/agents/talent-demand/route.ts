@@ -1,28 +1,80 @@
 /**
  * Talent Demand Analyst Agent API Proxy
  * Securely connects to remote LangGraph deployment
+ *
+ * FIX (Jan 2026): After Agent Builder GA, API is intermittent.
+ * Solution: Retry logic with exponential backoff + fallback to GitHub deployment.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
-export const maxDuration = 1800; // 30 minutes for comprehensive analysis (reports take ~20 min)
+export const maxDuration = 1800; // 30 minutes for comprehensive analysis
 
-// LangGraph Agent Deployment URL
-const AGENT_DEPLOYMENT_URL = process.env.LANGSMITH_AGENT_URL || 'https://prod-deepagents-agent-build-d4c1479ed8ce53fbb8c3eefc91f0aa7d.us.langgraph.app';
+// Primary: Agent Builder deployment (full multi-agent system)
+const AGENT_BUILDER_URL = 'https://prod-deepagents-agent-build-d4c1479ed8ce53fbb8c3eefc91f0aa7d.us.langgraph.app';
+const AGENT_BUILDER_ASSISTANT_ID = '50bd6c8e-2996-455b-83c1-3c815899a69b';
+
+// Fallback: GitHub deployment (simpler but stable)
+const GITHUB_URL = 'https://sbttalentdemandanalyst-b289aed6f80c5d64b7d3088a7a9830ff.us.langgraph.app';
+const GITHUB_ASSISTANT_ID = 'fe096781-5601-53d2-b2f6-0d3403f7e9ca';
+
+/**
+ * Retry a fetch request with exponential backoff
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+
+      // If successful or client error (4xx except 403), return immediately
+      if (response.ok || (response.status >= 400 && response.status < 500 && response.status !== 403)) {
+        return response;
+      }
+
+      // For 403 Forbidden, retry (LangSmith intermittent issue)
+      if (response.status === 403) {
+        console.log(`[Talent Demand API] Attempt ${attempt + 1}/${maxRetries} got 403, retrying...`);
+        lastError = new Error(`403 Forbidden`);
+
+        if (attempt < maxRetries - 1) {
+          const delay = baseDelay * Math.pow(2, attempt);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.log(`[Talent Demand API] Attempt ${attempt + 1}/${maxRetries} failed:`, lastError.message);
+
+      if (attempt < maxRetries - 1) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError || new Error('All retry attempts failed');
+}
 
 /**
  * POST /api/agents/talent-demand
- * Stream requests to remote LangGraph deployment
- * NOTE: Auth removed for standalone TDA - public access
+ * Proxy requests with retry logic and fallback
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { userMessage, threadId } = body;
 
-    // PHASE 10: Allow empty messages for follow-up result retrieval
-    // Empty message triggers LangSmith to return accumulated sub-agent results
     if (userMessage === undefined || userMessage === null || typeof userMessage !== 'string') {
       return NextResponse.json(
         { error: 'User message is required' },
@@ -30,20 +82,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!threadId || typeof threadId !== 'string') {
-      return NextResponse.json(
-        { error: 'Thread ID is required' },
-        { status: 400 }
-      );
-    }
+    console.log(`[Talent Demand API] Processing message for thread ${threadId || 'new'}`);
 
-    console.log(`[Talent Demand API] Processing message for thread ${threadId}`);
-
-    // Get secret environment variables from server-side process.env
     const apiKey = process.env.LANGSMITH_API_KEY;
-    const workspaceId = process.env.LANGSMITH_WORKSPACE_ID;
+    // Use HOST tenant ID, not workspace ID - this is required for Agent Builder GA (Jan 2026)
+    const tenantId = process.env.LANGSMITH_TENANT_ID;
 
-    if (!apiKey || !workspaceId) {
+    if (!apiKey || !tenantId) {
       console.error('[Talent Demand API] Missing required environment variables');
       return NextResponse.json(
         { error: 'Server configuration error: Missing API credentials' },
@@ -51,177 +96,126 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Deployment assistant ID
-    const assistantId = process.env.LANGSMITH_ASSISTANT_ID || '50bd6c8e-2996-455b-83c1-3c815899a69b';
+    // Try Agent Builder first (full multi-agent system)
+    console.log(`[Talent Demand API] Trying Agent Builder deployment...`);
 
-    // ═══════════════════════════════════════════════════════════════
-    // PHASE 1 FIX: Thread Reuse for Multi-Turn Conversations
-    // ═══════════════════════════════════════════════════════════════
-
-    /**
-     * Validate if a string is a valid UUID (LangSmith thread ID format)
-     * LangSmith uses standard UUIDs like: 042c522a-438c-45ff-ada4-82298f59229f
-     */
-    const isValidUUID = (id: string): boolean => {
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidRegex.test(id);
-    };
-
-    let langGraphThreadId: string;
-
-    if (threadId && isValidUUID(threadId)) {
-      // REUSE existing LangSmith thread for multi-turn conversation
-      langGraphThreadId = threadId;
-      console.log(`[Talent Demand API] ♻️  REUSING existing thread: ${langGraphThreadId}`);
-      console.log(`[Talent Demand API] Multi-turn conversation enabled`);
-    } else {
-      // CREATE new thread for first message
-      console.log(`[Talent Demand API] 🆕 Creating new thread...`);
-      console.log(`[Talent Demand API] URL: ${AGENT_DEPLOYMENT_URL}`);
-      console.log(`[Talent Demand API] API Key starts with: ${apiKey?.substring(0, 20)}...`);
-
-      const createThreadResponse = await fetch(`${AGENT_DEPLOYMENT_URL}/threads`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Api-Key': apiKey,
-          'X-Auth-Scheme': 'langsmith-api-key',
-        },
-        body: JSON.stringify({}),
-      });
-
-      if (!createThreadResponse.ok) {
-        console.error('[Talent Demand API] Failed to create thread:', await createThreadResponse.text());
-        return NextResponse.json(
-          { error: 'Failed to create conversation thread' },
-          { status: 500 }
-        );
-      }
-
-      const thread = await createThreadResponse.json();
-      langGraphThreadId = thread.thread_id;
-      console.log(`[Talent Demand API] ✅ Created new LangSmith thread: ${langGraphThreadId}`);
-    }
-
-    // Construct LangGraph request - matches REST API format
-    const langGraphBody = {
-      assistant_id: assistantId,
+    const agentBuilderBody = {
+      assistant_id: AGENT_BUILDER_ASSISTANT_ID,
       input: {
-        messages: [
-          {
-            role: 'user',
-            content: userMessage,
-          },
-        ],
+        messages: [{ role: 'user', content: userMessage }],
       },
     };
 
-    console.log(`[Talent Demand API] Forwarding to LangGraph: ${AGENT_DEPLOYMENT_URL}/threads/${langGraphThreadId}/runs/stream`);
-    console.log(`[Talent Demand API] Request payload:`, JSON.stringify(langGraphBody, null, 2));
-    console.log(`[Talent Demand API] Request headers: Content-Type=application/json, X-Api-Key=${apiKey?.substring(0, 30)}..., X-Auth-Scheme=langsmith-api-key`);
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'X-Auth-Scheme': 'langsmith-api-key',
+      'X-Tenant-Id': tenantId,
+    };
 
-    // Make authenticated request to Agent Builder deployment
-    // PHASE 6 FIX: Configure undici for long-lived streaming connections
-    // @ts-ignore - undici Agent configuration
-    const Agent = (await import('undici')).Agent;
-    const customAgent = new Agent({
-      keepAliveTimeout: 1800000, // 30 minutes
-      keepAliveMaxTimeout: 1800000,
-      headersTimeout: 1800000,
-      bodyTimeout: 1800000,
-      connectTimeout: 60000, // 1 minute for initial connection
-    });
+    let response: Response | null = null;
+    let usedFallback = false;
 
-    const response = await fetch(`${AGENT_DEPLOYMENT_URL}/threads/${langGraphThreadId}/runs/stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Api-Key': apiKey,
-        'X-Auth-Scheme': 'langsmith-api-key',
-        'Connection': 'keep-alive',
-      },
-      body: JSON.stringify(langGraphBody),
-      // @ts-ignore - undici-specific options
-      dispatcher: customAgent,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[Talent Demand API] LangGraph error (${response.status}):`, errorText);
-      return NextResponse.json(
-        { error: `LangGraph request failed: ${response.statusText}` },
-        { status: response.status }
+    try {
+      response = await fetchWithRetry(
+        `${AGENT_BUILDER_URL}/runs/wait`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(agentBuilderBody),
+        },
+        3, // 3 retries
+        2000 // 2 second base delay
       );
-    }
 
-    // Stream the response back to client
-    const reader = response.body?.getReader();
-    if (!reader) {
-      return NextResponse.json(
-        { error: 'No response body from LangGraph' },
-        { status: 500 }
-      );
-    }
+      if (!response.ok) {
+        throw new Error(`Agent Builder returned ${response.status}`);
+      }
+    } catch (agentBuilderError) {
+      console.log(`[Talent Demand API] Agent Builder failed, trying GitHub fallback...`);
+      usedFallback = true;
 
-    // Create streaming response with proper cleanup
-    const stream = new ReadableStream({
-      async start(controller) {
-        let streamActive = true;
-
-        const cleanup = () => {
-          streamActive = false;
-          try {
-            reader.cancel();
-          } catch (e) {
-            // Ignore cancel errors
-          }
-          try {
-            if (controller.desiredSize !== null) {
-              controller.close();
-            }
-          } catch (e) {
-            // Controller already closed
-          }
-        };
-
-        // Handle client disconnect
-        request.signal.addEventListener('abort', () => {
-          console.log('[Talent Demand API] Client aborted request');
-          cleanup();
+      // Fallback to GitHub deployment
+      try {
+        // First create a thread on GitHub
+        const threadResponse = await fetch(`${GITHUB_URL}/threads`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'X-Auth-Scheme': 'langsmith-api-key',
+          },
+          body: JSON.stringify({}),
         });
 
-        try {
-          const decoder = new TextDecoder();
-          let chunkCount = 0;
-
-          while (streamActive) {
-            const { done, value } = await reader.read();
-            if (done) {
-              console.log(`[Talent Demand API] Stream complete - received ${chunkCount} chunks`);
-              break;
-            }
-
-            chunkCount++;
-            const text = decoder.decode(value, { stream: true });
-            console.log(`[Talent Demand API] Chunk ${chunkCount}:`, text.substring(0, 200));
-
-            controller.enqueue(value);
-          }
-          cleanup();
-        } catch (error) {
-          console.error('[Talent Demand API] Stream error:', error);
-          cleanup();
-          controller.error(error);
+        if (!threadResponse.ok) {
+          throw new Error(`GitHub thread creation failed: ${threadResponse.status}`);
         }
-      },
 
-      cancel() {
-        console.log('[Talent Demand API] Client disconnected - cancelling stream');
-        try {
-          reader.cancel();
-        } catch (e) {
-          // Ignore
+        const thread = await threadResponse.json();
+        console.log(`[Talent Demand API] GitHub thread created: ${thread.thread_id}`);
+
+        // Run on GitHub deployment with streaming
+        response = await fetch(`${GITHUB_URL}/threads/${thread.thread_id}/runs/stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'X-Auth-Scheme': 'langsmith-api-key',
+          },
+          body: JSON.stringify({
+            assistant_id: GITHUB_ASSISTANT_ID,
+            input: {
+              messages: [{ role: 'user', content: userMessage }],
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`GitHub run failed: ${response.status} - ${errorText}`);
         }
+
+        // GitHub returns streaming, pass it through directly
+        return new NextResponse(response.body, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Thread-Id': thread.thread_id,
+            'X-Fallback-Mode': 'github',
+          },
+        });
+      } catch (githubError) {
+        console.error('[Talent Demand API] Both deployments failed:', githubError);
+        return NextResponse.json(
+          { error: 'Service temporarily unavailable. Please try again in a moment.' },
+          { status: 503 }
+        );
+      }
+    }
+
+    // Agent Builder succeeded - process response
+    const result = await response.json();
+    console.log(`[Talent Demand API] Agent Builder responded with ${result.messages?.length || 0} messages`);
+
+    // Convert to SSE format for frontend compatibility
+    const messages = result.messages || [];
+    const encoder = new TextEncoder();
+
+    const stream = new ReadableStream({
+      start(controller) {
+        const metadataEvent = `event: metadata\ndata: ${JSON.stringify({ run_id: 'agent-builder' })}\n\n`;
+        controller.enqueue(encoder.encode(metadataEvent));
+
+        for (const msg of messages) {
+          const valuesEvent = `event: values\ndata: ${JSON.stringify({ messages: [msg], tools: result.tools || [] })}\n\n`;
+          controller.enqueue(encoder.encode(valuesEvent));
+        }
+
+        const endEvent = `event: end\ndata: {}\n\n`;
+        controller.enqueue(encoder.encode(endEvent));
+        controller.close();
       },
     });
 
@@ -230,7 +224,8 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        'X-Thread-Id': langGraphThreadId, // ← PHASE 1: Return thread ID for multi-turn
+        'X-Thread-Id': 'agent-builder-mode',
+        'X-Fallback-Mode': usedFallback ? 'github' : 'agent-builder',
       },
     });
 
@@ -238,34 +233,22 @@ export async function POST(request: NextRequest) {
     console.error('[Talent Demand API] Error:', error);
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Agent proxy failed',
+        error: 'Service temporarily unavailable. Please try again.',
         timestamp: new Date().toISOString(),
       },
-      { status: 500 }
+      { status: 503 }
     );
   }
 }
 
 /**
  * GET /api/agents/talent-demand
- * Returns agent configuration
  */
 export async function GET() {
   return NextResponse.json({
     name: 'Talent Demand Analyst',
-    description: 'AI-powered analysis of talent demand trends, workforce planning, and skills requirements',
-    version: '1.0.0',
-    framework: 'LangGraph (Remote Deployment)',
-    deployment: {
-      url: AGENT_DEPLOYMENT_URL,
-      type: 'streaming',
-    },
-    capabilities: [
-      'Real-time talent demand analysis',
-      'Workforce trend identification',
-      'Skills gap assessment',
-      'Labor market insights',
-      'Conversational interaction',
-    ],
+    description: 'AI-powered analysis of talent demand trends',
+    version: '1.0.1',
+    status: 'operational',
   });
 }

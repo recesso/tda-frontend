@@ -1,0 +1,25 @@
+# Railway Configuration
+# https://docs.railway.app/reference/config-as-code
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# Resource limits
+numReplicas = 1
+
+[deploy.env]
+# Runtime configuration (secrets set via Railway dashboard)
+ENVIRONMENT = "production"
+LOG_LEVEL = "INFO"
+PYTHONUNBUFFERED = "1"
+
+# Health check configuration
+HEALTH_CHECK_ENABLED = "true"

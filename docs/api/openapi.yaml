@@ -1,0 +1,406 @@
+openapi: 3.1.0
+info:
+  title: Talent Demand Analyst API
+  description: |
+    API for the Talent Demand Analyst - an AI-powered system that analyzes
+    job market data, identifies skill trends, and provides actionable talent insights.
+
+    ## Overview
+
+    The API provides a single main endpoint for submitting analysis queries.
+    Responses are streamed using Server-Sent Events (SSE) for real-time feedback.
+
+    ## Authentication
+
+    Currently uses API key authentication via the `X-API-Key` header.
+    Future versions will support JWT tokens.
+
+    ## Rate Limits
+
+    - 20 requests per minute per API key
+    - 100 requests per hour per API key
+    - Maximum 3 concurrent requests
+  version: 1.0.0
+  contact:
+    name: TDA Support
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: https://tda-api.railway.app
+    description: Production
+
+tags:
+  - name: Chat
+    description: Analysis query endpoints
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /api/chat:
+    post:
+      tags:
+        - Chat
+      summary: Submit analysis query
+      description: |
+        Submit a natural language query for talent demand analysis.
+
+        The response is streamed using Server-Sent Events (SSE).
+        Each event is a JSON object with a `type` field indicating the event type.
+
+        ## Event Types
+
+        - `token`: Streaming text content
+        - `source`: Source citation with URL and title
+        - `progress`: Analysis progress update
+        - `done`: Stream completion
+        - `error`: Error during analysis
+
+        ## Example Usage
+
+        ```javascript
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': 'your-api-key'
+          },
+          body: JSON.stringify({ message: 'Analyze demand for ML engineers' })
+        });
+
+        const reader = response.body.getReader();
+        // Process SSE stream...
+        ```
+      operationId: submitQuery
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+            examples:
+              simple:
+                summary: Simple role analysis
+                value:
+                  message: "Analyze demand for ML engineers in fintech"
+              complex:
+                summary: Complex trend analysis
+                value:
+                  message: "What are the emerging skills in AI/ML that I should be hiring for in 2025? Focus on the healthcare industry."
+      responses:
+        '200':
+          description: Streaming response with analysis
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream
+              examples:
+                stream:
+                  value: |
+                    data: {"type": "progress", "agent": "coordinator", "status": "started"}
+
+                    data: {"type": "token", "content": "Based on my analysis"}
+
+                    data: {"type": "token", "content": " of current job postings..."}
+
+                    data: {"type": "source", "url": "https://example.com/jobs", "title": "ML Jobs Report"}
+
+                    data: {"type": "done", "total_tokens": 1234, "duration_ms": 45000}
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                validation_error:
+                  value:
+                    error: "validation_error"
+                    message: "Message is required"
+                    details:
+                      field: "message"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                unauthorized:
+                  value:
+                    error: "unauthorized"
+                    message: "Invalid or missing API key"
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                rate_limit:
+                  value:
+                    error: "rate_limit_exceeded"
+                    message: "Too many requests"
+                    retry_after: 60
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/health:
+    get:
+      tags:
+        - Health
+      summary: Liveness check
+      description: |
+        Basic health check to verify the service is running.
+        Does not check external dependencies.
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                healthy:
+                  value:
+                    status: "healthy"
+                    timestamp: "2025-01-21T10:30:00Z"
+
+  /api/health/ready:
+    get:
+      tags:
+        - Health
+      summary: Readiness check
+      description: |
+        Comprehensive health check that verifies:
+        - Service is running
+        - External APIs are reachable
+        - System has sufficient resources
+      operationId: readinessCheck
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+              examples:
+                ready:
+                  value:
+                    status: "ready"
+                    timestamp: "2025-01-21T10:30:00Z"
+                    checks:
+                      anthropic: "ok"
+                      tavily: "ok"
+                      exa: "ok"
+        '503':
+          description: Service not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+              examples:
+                not_ready:
+                  value:
+                    status: "not_ready"
+                    timestamp: "2025-01-21T10:30:00Z"
+                    checks:
+                      anthropic: "ok"
+                      tavily: "error"
+                      exa: "ok"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+
+  schemas:
+    ChatRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Natural language query for analysis
+          minLength: 1
+          maxLength: 2000
+          example: "Analyze demand for ML engineers in fintech"
+        conversation_id:
+          type: string
+          format: uuid
+          description: Optional conversation ID for future use
+          nullable: true
+
+    TokenEvent:
+      type: object
+      required:
+        - type
+        - content
+      properties:
+        type:
+          type: string
+          enum: [token]
+        content:
+          type: string
+          description: Text content chunk
+
+    SourceEvent:
+      type: object
+      required:
+        - type
+        - url
+        - title
+      properties:
+        type:
+          type: string
+          enum: [source]
+        url:
+          type: string
+          format: uri
+          description: Source URL
+        title:
+          type: string
+          description: Source title
+        snippet:
+          type: string
+          description: Relevant snippet from source
+          nullable: true
+
+    ProgressEvent:
+      type: object
+      required:
+        - type
+        - agent
+        - status
+      properties:
+        type:
+          type: string
+          enum: [progress]
+        agent:
+          type: string
+          description: Agent name
+          enum: [coordinator, job_analyzer, skill_researcher, report_synthesizer]
+        status:
+          type: string
+          enum: [started, completed, failed]
+        message:
+          type: string
+          description: Optional status message
+          nullable: true
+
+    DoneEvent:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [done]
+        total_tokens:
+          type: integer
+          description: Total tokens used
+          nullable: true
+        duration_ms:
+          type: integer
+          description: Total duration in milliseconds
+          nullable: true
+
+    StreamErrorEvent:
+      type: object
+      required:
+        - type
+        - message
+      properties:
+        type:
+          type: string
+          enum: [error]
+        message:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+          nullable: true
+        recoverable:
+          type: boolean
+          description: Whether the error is recoverable
+          default: false
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+          enum:
+            - validation_error
+            - unauthorized
+            - rate_limit_exceeded
+            - internal_error
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+          nullable: true
+        retry_after:
+          type: integer
+          description: Seconds to wait before retrying (for rate limits)
+          nullable: true
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+
+    ReadinessResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+        - checks
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: object
+          properties:
+            anthropic:
+              type: string
+              enum: [ok, error]
+            tavily:
+              type: string
+              enum: [ok, error]
+            exa:
+              type: string
+              enum: [ok, error]

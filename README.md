@@ -1,36 +1,144 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Talent Demand Analyst (TDA) Frontend
 
-## Getting Started
+> AI-powered talent demand trends and workforce planning insights
 
-First, run the development server:
+A standalone Next.js frontend that provides a conversational interface for the Talent Demand Analyst AI agent. This application acts as a proxy to a remote LangGraph/LangSmith agent deployment.
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 18+ or Bun
+- LangSmith API credentials
+
+### Installation
 
 ```bash
+# Clone and install
+git clone <repository-url>
+cd tda-frontend
+npm install
+
+# Configure environment
+cp .env.example .env.local
+# Edit .env.local with your LangSmith credentials
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to use the application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📋 Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create a `.env.local` file with:
 
-## Learn More
+```bash
+# Required
+LANGSMITH_API_KEY=lsv2_pt_xxxxx...
+LANGSMITH_WORKSPACE_ID=your-workspace-id
 
-To learn more about Next.js, take a look at the following resources:
+# Optional (defaults provided)
+LANGSMITH_AGENT_URL=https://your-agent-deployment.langgraph.app
+LANGSMITH_ASSISTANT_ID=your-assistant-id
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🏗️ Architecture
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+This is a **frontend-only** application with no local database. All data flows through a remote LangGraph agent:
 
-## Deploy on Vercel
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Browser UI    │────▶│  Next.js API    │────▶│   LangSmith     │
+│   (React)       │◀────│  (Proxy)        │◀────│   Agent         │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Key Features
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Real-time Streaming** - SSE stream processing from LangGraph
+- **Multi-turn Conversations** - Thread-based conversation continuity
+- **Artifact Generation** - Download generated reports and analyses
+- **Agent Task Visualization** - See sub-agent coordination in real-time
+
+## 📁 Project Structure
+
+```
+tda-frontend/
+├── app/
+│   ├── api/
+│   │   └── agents/
+│   │       └── talent-demand/
+│   │           ├── route.ts       # Main agent proxy
+│   │           ├── runs/route.ts  # Run status API
+│   │           └── state/route.ts # Thread state API
+│   ├── components/                # (future components)
+│   ├── page.tsx                   # Main chat interface
+│   └── layout.tsx                 # Root layout
+├── lib/
+│   └── talent-demand-agent.ts     # Stream client library
+├── docs/
+│   └── data-architecture.md       # Complete data architecture
+└── public/
+    └── images/                    # Static assets
+```
+
+## 📖 Documentation
+
+- **[Data Architecture](./docs/data-architecture.md)** - Complete reference for data structures, API flows, and integrations
+
+## 🛠️ Development
+
+```bash
+# Development server
+npm run dev
+
+# Production build
+npm run build
+
+# Start production server
+npm run start
+
+# Lint code
+npm run lint
+```
+
+## 🔧 Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Framework | Next.js 16.1.1 |
+| UI | React 19.2.3 |
+| Language | TypeScript |
+| Styling | Tailwind CSS 3.4.18 |
+| Markdown | react-markdown 10.1.0 |
+| HTTP | undici 6.23.0 |
+
+## 🌐 Deployment
+
+The application is configured for standalone deployment:
+
+```bash
+# Build standalone output
+npm run build
+
+# Output in .next/standalone
+```
+
+### Docker Support
+
+The standalone output is Docker-ready. Copy `.next/static` and `public` folders alongside the standalone build.
+
+## 🔐 Security
+
+- **No Authentication** - Standalone public access (intentional)
+- **API Keys Server-Side** - LangSmith credentials never exposed to client
+- **Proxy Architecture** - All external calls routed through API routes
+
+## 📝 License
+
+[Add license information]
+
+---
+
+*Part of the Skill Bridge Talent ecosystem*
