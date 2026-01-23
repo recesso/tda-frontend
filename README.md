@@ -1,8 +1,25 @@
-# Talent Demand Analyst (TDA) Frontend
+# Talent Demand Analyst (TDA)
 
 > AI-powered talent demand trends and workforce planning insights
 
-A standalone Next.js frontend that provides a conversational interface for the Talent Demand Analyst AI agent. This application acts as a proxy to a remote LangGraph/LangSmith agent deployment.
+## Project Status: PAUSED
+
+**Current State:** Frontend working, Python backend in planning
+**Resume From:** [docs/PROJECT-STATUS.md](docs/PROJECT-STATUS.md)
+
+| Document | Purpose |
+|----------|---------|
+| [PROJECT-STATUS.md](docs/PROJECT-STATUS.md) | **Start here** - Full project context, what exists, what's next |
+| [tda-COMMAND-CENTER-ELITE.md](docs/00-project-management/tda-COMMAND-CENTER-ELITE.md) | 98-task breakdown with verification commands |
+| [IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | Code samples for all backend components |
+
+**Next Task:** 1.1.1 - Create backend directory structure
+
+---
+
+## Overview
+
+A standalone Next.js frontend that provides a conversational interface for the Talent Demand Analyst AI agent. Currently proxies to a remote LangGraph/LangSmith agent deployment; being migrated to a self-hosted Python backend with deepagents.
 
 ## 🚀 Quick Start
 
@@ -85,7 +102,21 @@ tda-frontend/
 
 ## 📖 Documentation
 
-- **[Data Architecture](./docs/data-architecture.md)** - Complete reference for data structures, API flows, and integrations
+### Project Management
+| Document | Description |
+|----------|-------------|
+| [PROJECT-STATUS.md](docs/PROJECT-STATUS.md) | Current state, resume instructions, architecture overview |
+| [tda-COMMAND-CENTER-ELITE.md](docs/00-project-management/tda-COMMAND-CENTER-ELITE.md) | 98-task breakdown with DoD and verification |
+
+### Technical Documentation
+| Document | Description |
+|----------|-------------|
+| [PRD](docs/requirements/2025-01-21-talent-demand-analyst-prd.md) | Product requirements |
+| [TRD](docs/requirements/2025-01-21-talent-demand-analyst-trd.md) | Technical requirements |
+| [Design Doc](docs/design/2025-01-21-talent-demand-analyst-design.md) | System design decisions |
+| [QA Plan](docs/qa/2025-01-21-talent-demand-analyst-qa-plan.md) | Test strategy and coverage targets |
+| [Implementation Plan](docs/IMPLEMENTATION_PLAN.md) | Code samples for backend |
+| [Production Readiness](docs/PRODUCTION_READINESS.md) | Security, reliability, observability |
 
 ## 🛠️ Development
 
